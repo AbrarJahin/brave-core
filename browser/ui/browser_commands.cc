@@ -80,8 +80,10 @@
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "components/tabs/public/tab_group.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/media_session.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/web_contents.h"
+#include "services/media_session/public/mojom/media_session.mojom.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/window_open_disposition.h"
@@ -458,6 +460,27 @@ void ToggleActiveTabAudioMute(Browser* browser) {
   bool mute_tab = !contents->IsAudioMuted();
   SetTabAudioMuted(contents, mute_tab, TabMutedReason::kAudioIndicator,
                    std::string());
+}
+
+void TogglePictureInPicture(Browser* browser) {
+  WebContents* contents = browser->tab_strip_model()->GetActiveWebContents();
+  if (!contents) {
+    return;
+  }
+
+  auto* session = content::MediaSession::Get(contents);
+  // Exiting PiP delegates to the browser, so only close the active tab's PiP.
+  if (contents->HasPictureInPictureVideo() ||
+      contents->HasPictureInPictureDocument()) {
+    session->ExitPictureInPicture();
+    return;
+  }
+
+  if (std::ranges::contains(
+          session->GetMediaSessionActionsSync(),
+          media_session::mojom::MediaSessionAction::kEnterPictureInPicture)) {
+    session->EnterPictureInPicture();
+  }
 }
 
 void ToggleSidebarPosition(Browser* browser) {

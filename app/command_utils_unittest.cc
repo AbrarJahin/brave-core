@@ -9,6 +9,7 @@
 
 #include "base/containers/flat_set.h"
 #include "base/test/scoped_feature_list.h"
+#include "brave/app/brave_command_ids.h"
 #include "brave/components/commands/common/features.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/accelerator_table.h"
@@ -54,4 +55,14 @@ TEST(CommandUtilsUnitTest, IncludesVerticalTabsToggleCommand) {
       std::ranges::contains(commands::GetCommands(), IDC_TOGGLE_VERTICAL_TABS));
   EXPECT_EQ(commands::GetCommandName(IDC_TOGGLE_VERTICAL_TABS),
             "Toggle vertical tabs");
+}
+
+TEST(CommandUtilsUnitTest, IncludesPictureInPictureToggleCommand) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(commands::features::kBraveCommands);
+
+  EXPECT_TRUE(std::ranges::contains(commands::GetCommands(),
+                                    IDC_TOGGLE_PICTURE_IN_PICTURE));
+  EXPECT_EQ(commands::GetCommandName(IDC_TOGGLE_PICTURE_IN_PICTURE),
+            "Toggle picture-in-picture (PiP)");
 }

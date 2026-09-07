@@ -5,6 +5,7 @@
 
 #include "brave/browser/ui/brave_browser_command_controller.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 
@@ -37,7 +38,9 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "chrome/common/chrome_isolated_world_ids.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
@@ -47,9 +50,13 @@
 #include "components/prefs/pref_service.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/sync/base/command_line_switches.h"
+#include "content/public/browser/media_session.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/media_session/public/mojom/media_session.mojom.h"
 
 #if BUILDFLAG(ENABLE_AI_CHAT)
 #include "brave/components/ai_chat/core/browser/utils.h"
@@ -226,6 +233,117 @@ class BraveBrowserCommandControllerTest : public InProcessBrowserTest {
   policy::MockConfigurationPolicyProvider provider_;
   base::test::ScopedFeatureList scoped_feature_list_;
 };
+
+class BraveBrowserCommandControllerPictureInPictureTest
+    : public BraveBrowserCommandControllerTest {
+ public:
+  void SetUpOnMainThread() override {
+    BraveBrowserCommandControllerTest::SetUpOnMainThread();
+    embedded_test_server()->ServeFilesFromSourceDirectory("chrome/test/data");
+    ASSERT_TRUE(embedded_test_server()->Start());
+  }
+
+  void LoadPlayingVideo() {
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(
+        browser(), embedded_test_server()->GetURL(
+                       "/media/picture-in-picture/window-size.html")));
+    ASSERT_TRUE(content::ExecJs(contents(),
+                                R"(
+          const video = document.querySelector('video');
+          video.loop = true;
+          video.addEventListener('enterpictureinpicture', () => {
+            document.title = 'enterpictureinpicture';
+          });
+          video.addEventListener('leavepictureinpicture', () => {
+            document.title = 'leavepictureinpicture';
+          });
+          video.play();
+        )",
+                                content::EXECUTE_SCRIPT_DEFAULT_OPTIONS,
+                                ISOLATED_WORLD_ID_BRAVE_INTERNAL));
+    ASSERT_TRUE(
+        base::test::RunUntil([&]() { return CanEnterPictureInPicture(); }));
+  }
+
+  void EnterPictureInPicture() {
+    content::TitleWatcher watcher(contents(), u"enterpictureinpicture");
+    ASSERT_TRUE(
+        chrome::ExecuteCommand(browser(), IDC_TOGGLE_PICTURE_IN_PICTURE));
+    EXPECT_EQ(u"enterpictureinpicture", watcher.WaitAndGetTitle());
+    EXPECT_TRUE(contents()->HasPictureInPictureVideo());
+  }
+
+  bool CanEnterPictureInPicture() {
+    return std::ranges::contains(
+        content::MediaSession::Get(contents())->GetMediaSessionActionsSync(),
+        media_session::mojom::MediaSessionAction::kEnterPictureInPicture);
+  }
+
+  content::WebContents* contents() {
+    return browser()->tab_strip_model()->GetActiveWebContents();
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(BraveBrowserCommandControllerPictureInPictureTest,
+                       TogglePictureInPicture) {
+  ASSERT_NO_FATAL_FAILURE(LoadPlayingVideo());
+  ASSERT_NO_FATAL_FAILURE(EnterPictureInPicture());
+  content::TitleWatcher watcher(contents(), u"leavepictureinpicture");
+  ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_TOGGLE_PICTURE_IN_PICTURE));
+  EXPECT_EQ(u"leavepictureinpicture", watcher.WaitAndGetTitle());
+  EXPECT_FALSE(contents()->HasPictureInPictureVideo());
+  EXPECT_EQ(false, content::EvalJs(contents(),
+                                   "document.querySelector('video').paused",
+                                   content::EXECUTE_SCRIPT_DEFAULT_OPTIONS,
+                                   ISOLATED_WORLD_ID_BRAVE_INTERNAL));
+}
+
+IN_PROC_BROWSER_TEST_F(BraveBrowserCommandControllerPictureInPictureTest,
+                       NoVideo) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
+  ASSERT_FALSE(CanEnterPictureInPicture());
+  ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_TOGGLE_PICTURE_IN_PICTURE));
+  EXPECT_FALSE(contents()->HasPictureInPictureVideo());
+  EXPECT_FALSE(contents()->HasPictureInPictureDocument());
+}
+
+IN_PROC_BROWSER_TEST_F(BraveBrowserCommandControllerPictureInPictureTest,
+                       UnavailableVideo) {
+  ASSERT_NO_FATAL_FAILURE(LoadPlayingVideo());
+  ASSERT_TRUE(content::ExecJs(
+      contents(),
+      "document.querySelector('video').disablePictureInPicture = true",
+      content::EXECUTE_SCRIPT_DEFAULT_OPTIONS,
+      ISOLATED_WORLD_ID_BRAVE_INTERNAL));
+  ASSERT_TRUE(
+      base::test::RunUntil([&]() { return !CanEnterPictureInPicture(); }));
+  ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_TOGGLE_PICTURE_IN_PICTURE));
+  EXPECT_FALSE(contents()->HasPictureInPictureVideo());
+}
+
+IN_PROC_BROWSER_TEST_F(BraveBrowserCommandControllerPictureInPictureTest,
+                       DoesNotCloseAnotherTabsPictureInPicture) {
+  ASSERT_NO_FATAL_FAILURE(LoadPlayingVideo());
+  ASSERT_NO_FATAL_FAILURE(EnterPictureInPicture());
+  auto* pip_contents = contents();
+
+  chrome::AddTabAt(browser(), GURL("about:blank"), -1, true);
+  ASSERT_NE(pip_contents, contents());
+  ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_TOGGLE_PICTURE_IN_PICTURE));
+  EXPECT_TRUE(pip_contents->HasPictureInPictureVideo());
+  EXPECT_EQ(true, content::EvalJs(pip_contents,
+                                  "document.pictureInPictureElement === "
+                                  "document.querySelector('video')",
+                                  content::EXECUTE_SCRIPT_DEFAULT_OPTIONS,
+                                  ISOLATED_WORLD_ID_BRAVE_INTERNAL));
+  EXPECT_FALSE(contents()->HasPictureInPictureVideo());
+
+  browser()->tab_strip_model()->ActivateTabAt(0);
+  content::TitleWatcher watcher(pip_contents, u"leavepictureinpicture");
+  ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_TOGGLE_PICTURE_IN_PICTURE));
+  EXPECT_EQ(u"leavepictureinpicture", watcher.WaitAndGetTitle());
+  EXPECT_FALSE(pip_contents->HasPictureInPictureVideo());
+}
 
 // Regular window
 IN_PROC_BROWSER_TEST_F(BraveBrowserCommandControllerTest,

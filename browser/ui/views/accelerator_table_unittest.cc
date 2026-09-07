@@ -5,6 +5,7 @@
 
 #include "chrome/browser/ui/accelerator_table.h"
 
+#include <algorithm>
 #include <vector>
 
 #include "base/containers/flat_set.h"
@@ -13,6 +14,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/events/event_constants.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 
 namespace {
 
@@ -31,6 +33,16 @@ TEST(AcceleratorTableTest, CheckBraveAccelerators) {
   EXPECT_TRUE(HasCommandID(IDC_NEW_OFFTHERECORD_WINDOW_TOR));
   EXPECT_TRUE(HasCommandID(IDC_TOGGLE_SIDEBAR));
   EXPECT_TRUE(HasCommandID(IDC_NEW_SPLIT_TAB));
+}
+
+TEST(AcceleratorTableTest, PictureInPictureDefault) {
+  const auto accelerators = GetAcceleratorList();
+  const auto mapping =
+      std::ranges::find(accelerators, IDC_TOGGLE_PICTURE_IN_PICTURE,
+                        &AcceleratorMapping::command_id);
+  ASSERT_NE(mapping, accelerators.end());
+  EXPECT_EQ(ui::VKEY_P, mapping->keycode);
+  EXPECT_EQ(ui::EF_ALT_DOWN, mapping->modifiers);
 }
 
 TEST(AcceleratorTableTest, CheckDuplicatedAccelerators) {
