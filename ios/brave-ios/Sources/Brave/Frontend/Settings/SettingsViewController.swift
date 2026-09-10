@@ -324,7 +324,12 @@ class SettingsViewController: TableViewController, BraveAccountAuthenticationObs
             guard let settingsUrl = URL(string: UIApplication.openSettingsURLString) else {
               return
             }
-            UIApplication.shared.open(settingsUrl)
+            Task {
+              if let windowScene = viewIfLoaded?.window?.windowScene {
+                await DefaultBrowserPictureInPictureController.present(in: windowScene)
+              }
+              await UIApplication.shared.open(settingsUrl)
+            }
           },
           image: UIImage(braveSystemNamed: "leo.set.as-default"),
           cellClass: MultilineButtonCell.self
@@ -1533,9 +1538,7 @@ class SettingsViewController: TableViewController, BraveAccountAuthenticationObs
         Row(
           text: Strings.Autofill.managePasswordsTitle,
           selection: { [unowned self] in
-            if FeatureList.kUseChromiumWebViewsAutofill.enabled,
-              let autofillDataManager = braveCore.defaultWebViewConfiguration.autofillDataManager
-            {
+            if let autofillDataManager = braveCore.defaultWebViewConfiguration.autofillDataManager {
               let viewModel = ManagePasswordsViewModel(autofillDataManager: autofillDataManager)
               let controller = UIHostingController(
                 rootView:

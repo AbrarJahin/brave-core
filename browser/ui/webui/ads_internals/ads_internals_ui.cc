@@ -7,16 +7,18 @@
 
 #include <utility>
 
+#include "base/feature_list.h"
 #include "brave/browser/brave_ads/ads_service_factory.h"
 #include "brave/browser/ui/webui/brave_webui_source.h"
 #include "brave/components/brave_ads/browser/resources/grit/ads_internals_generated_map.h"
-#include "brave/components/brave_ads/core/browser/service/ads_service.h"
+#include "brave/components/brave_ads/core/public/ads_internals/ads_internals_verbose_mode_feature.h"
 #include "brave/components/brave_rewards/core/buildflags/buildflags.h"
 #include "brave/components/brave_rewards/core/pref_names.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/grit/brave_components_resources.h"
 #include "components/prefs/pref_service.h"
-#include "content/public/browser/web_contents.h"
+#include "components/variations/service/variations_service.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 
@@ -24,7 +26,6 @@
 #include "base/feature_list.h"
 #include "brave/browser/brave_rewards/rewards_service_factory.h"
 #include "brave/components/brave_rewards/core/features.h"
-#include "chrome/browser/browser_process.h"
 #endif  // BUILDFLAG(ENABLE_BRAVE_REWARDS)
 
 namespace {
@@ -63,7 +64,9 @@ AdsInternalsUI::AdsInternalsUI(content::WebUI* web_ui)
       handler_(brave_ads::AdsServiceFactory::GetForProfile(
                    Profile::FromWebUI(web_ui)),
                *Profile::FromWebUI(web_ui)->GetPrefs(),
-               /*variations_service=*/nullptr,
+               g_browser_process->variations_service(),
+               // Nothing reads these diagnostics yet; wired up once the
+               // Resources tab lands.
                AdsInternalsHandler::GetComponentIdCallback(),
                AdsInternalsHandler::GetComponentIdCallback(),
                AdsInternalsHandler::GetComponentIdCallback(),
@@ -80,6 +83,9 @@ AdsInternalsUI::AdsInternalsUI(content::WebUI* web_ui)
       IDR_ADS_INTERNALS_HTML);
   source->AddBoolean("logsSupported", rewards_service_ != nullptr);
   source->AddBoolean("verboseLoggingEnabled", IsVerboseLoggingEnabled());
+  source->AddBoolean(
+      "adsInternalsVerboseModeEnabled",
+      base::FeatureList::IsEnabled(brave_ads::kAdsInternalsVerboseModeFeature));
 }
 
 AdsInternalsUI::~AdsInternalsUI() = default;

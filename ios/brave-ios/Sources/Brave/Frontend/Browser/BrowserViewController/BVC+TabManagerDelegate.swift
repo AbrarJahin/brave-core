@@ -97,6 +97,12 @@ extension BrowserViewController: TabManagerDelegate {
     // When `BraveShieldsTabHelper+TabPolicyDecider` is moved to `BraveShields` target,
     // we should add it as a policy decider at initialization.
     tab.addPolicyDecider(braveShieldsHelper)
+    // Must be added before `braveSearch`. HttpsUpgradeTabHelper needs first look at a
+    // main-frame http navigation so it can attempt the upgrade before BraveSearchTabHelper
+    // decides whether to route it into QuickView. BraveSearchTabHelper recognizes a reissued
+    // https request via `tab.httpsUpgradeHelper?.pendingUpgrade` and only opens QuickView once
+    // `tabDidFinishNavigation` confirms it actually landed on the upgraded (or
+    // gracefully-rolled-back) page rather than a failure/interstitial.
     if FeatureList.kBraveHttpsByDefault.enabled {
       tab.httpsUpgradeHelper = .init(
         tab: tab,
@@ -163,6 +169,7 @@ extension BrowserViewController: TabManagerDelegate {
         syncAPI: profileController.syncAPI,
         sendTabAPI: profileController.sendTabAPI,
         historyAPI: profileController.historyAPI,
+        httpsUpgradeExceptionsService: braveCore.httpsUpgradeExceptionsService,
         onOpenInNewTab: { [weak self] request, isPrivateMode in
           guard let self else { return }
           self.tabManager.addTabAndSelect(
@@ -180,6 +187,26 @@ extension BrowserViewController: TabManagerDelegate {
           self.tabManager.configureTab(tab, request: request, flushToDisk: false, zombie: true)
           self.tabManager.saveTab(tab, saveOrder: true)
           self.tabManager.selectTab(tab)
+        },
+        onShowConfirmationAlert: { [weak self] in
+          let alert = UIAlertController(
+            title: Strings.quickViewConfirmationAlertTitle,
+            message: Strings.quickViewConfirmationAlertMessage,
+            preferredStyle: .alert
+          )
+          alert.addAction(
+            .init(title: Strings.quickViewConfirmationAlertKeepButtonTitle, style: .default)
+          )
+          alert.addAction(
+            .init(
+              title: Strings.quickViewConfirmationAlertTurnOffButtonTitle,
+              style: .cancel,
+              handler: { _ in
+                Preferences.General.openLinkInQuickViewMode.value = false
+              }
+            )
+          )
+          self?.present(alert, animated: true)
         }
       )
       if let sheet = quickViewController.sheetPresentationController {
