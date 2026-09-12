@@ -964,3 +964,83 @@ public class BraveYouTubePictureInPictureController {
         return mScreenStateReceiver;
     }
 }
+    /**
+     * Handles picture-in-picture shortcut launch.
+     * This method is called when the user launches the PiP shortcut from the home screen.
+     */
+    public void onPictureInPictureShortcutLaunched() {
+        if (!isFeatureEnabled()) {
+            Log.w(TAG, 
+Picture-in-Picture
+feature
+not
+enabled);
+            return;
+        }
+
+        // Try to enter Picture-in-Picture mode for YouTube
+        if (mActivity == null) {
+            Log.w(TAG, Activity
+is
+null
+cannot
+enter
+PiP);
+            return;
+        }
+
+        // Check if we're in a tab with YouTube content
+        TabModelSelector tabModelSelector = getTabModelSelectorIfReady();
+        if (tabModelSelector == null) {
+            Log.w(TAG, Tab
+model
+selector
+not
+ready);
+            return;
+        }
+
+        Tab activeTab = tabModelSelector.getCurrentTab();
+        if (activeTab == null) {
+            Log.w(TAG, No
+active
+tab
+found);
+            return;
+        }
+
+        WebContents webContents = activeTab.getWebContents();
+        if (webContents == null) {
+            Log.w(TAG, Active
+tab
+has
+no
+web
+contents);
+            return;
+        }
+
+        // Check if the current page is a YouTube page
+        String url = activeTab.getUrl().getSpec();
+        if (!isYouTubeUrl(url)) {
+            Log.w(TAG, Current
+page
+is
+not
+YouTube:
+ + url);
+            return;
+        }
+
+        // Attempt to enter PiP mode
+        enterPictureInPictureMode(webContents);
+    }
+
+    /**
+     * Checks if the URL belongs to YouTube.
+     */
+    private boolean isYouTubeUrl(String url) {
+        if (url == null || url.isEmpty()) return false;
+        return url.contains(
+youtube.com) || url.contains(youtu.be);
+    }

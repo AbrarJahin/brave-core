@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/brave_pip_shortcut_icon"
+        android:shortcutId="youtube_pip"
+        android:shortcutShortLabel="@string/brave_youtube_pip_shortcut_label"
+        android:shortcutLongLabel="@string/brave_youtube_pip_shortcut_label">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetClass="org.chromium.chrome.browser.app.BraveActivity"
+            android:targetPackage="org.chromium.chrome">
+            <extra android:name="shortcut_id" android:value="youtube_pip" />
+        </intent>
+    </shortcut>
+</shortcuts>

@@ -3270,3 +3270,9 @@ public abstract class BraveActivity extends ChromeActivity
         }
     }
 }
+    /**
+     * Handles picture-in-picture shortcut launch.
+     */
+    public void onPictureInPictureShortcutLaunched() {
+        getYouTubePictureInPictureController().onPictureInPictureShortcutLaunched();
+    }
